@@ -1,0 +1,18 @@
+#!/bin/bash
+
+. $SNAP/actions/common/utils.sh
+
+snapctl start --enable microk8s.daemon-k8s-dqlite
+
+refresh_opt_in_local_config etcd-servers 'unix://${SNAP_DATA}/var/kubernetes/backend/kine.sock:12379' kube-apiserver
+
+refresh_opt_in_local_config etcd-cafile "" kube-apiserver
+refresh_opt_in_local_config etcd-certfile "" kube-apiserver
+refresh_opt_in_local_config etcd-keyfile "" kube-apiserver
+
+snapctl restart microk8s.daemon-kubelite
+
+rm -rf $SNAP_DATA/etcd $SNAP_DATA/manifests/etcd.manifest $SNAP_DATA/certs/etcd
+
+rm -rf $SNAP_DATA/var/lock/ha-etcd
+touch $SNAP_DATA/var/lock/ha-cluster

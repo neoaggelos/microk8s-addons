@@ -1,0 +1,10 @@
+microk8s-addons:
+  description: "My awesome demo repository."
+  addons:
+    - name: "ha-etcd"
+      description: "Enable HA etcd cluster"
+      version: "0.1"
+      check_status: "$SNAP_DATA/var/lock/ha-etcd"
+      supported_architectures:
+        - amd64
+        # - arm64

@@ -1,0 +1,42 @@
+#!/bin/bash
+
+. ${SNAP}/actions/common/utils.sh
+
+ETCD_VERSION=3.5.1
+
+mkdir -p ${SNAP_DATA}/etcd
+mkdir -p ${SNAP_DATA}/certs/etcd
+mkdir -p ${SNAP_DATA}/manifests
+
+refresh_opt_in_local_config pod-manifest-path ${SNAP_DATA}/manifests kubelet
+
+${SNAP}/microk8s-kubectl.wrapper delete -f ${SNAP_DATA}/args/cni-network/cni.yaml
+
+snapctl restart microk8s.daemon-kubelite
+
+# TODO(neoaggelos): replace with upstream source
+curl https://github.com/neoaggelos/etcdadm/releases/download/microk8s-1/etcdadm -L -o ${SNAP_COMMON}/etcdadm
+chmod +x ${SNAP_COMMON}/etcdadm
+
+# pull image to prevent timeouts during etcdadm init
+${SNAP}/microk8s-ctr.wrapper image pull quay.io/coreos/etcd:v${ETCD_VERSION} --hosts-dir ${SNAP_DATA}/args/certs.d
+
+${SNAP_COMMON}/etcdadm init --version ${ETCD_VERSION} --init-system kubelet --data-dir ${SNAP_DATA}/etcd --certs-dir ${SNAP_DATA}/certs/etcd --kubelet-pod-manifest-path ${SNAP_DATA}/manifests --install-dir ${SNAP_DATA}
+
+snapctl stop microk8s.daemon-kubelite
+
+refresh_opt_in_local_config etcd-servers https://127.0.0.1:2379 kube-apiserver
+refresh_opt_in_local_config etcd-cafile ${SNAP_DATA}/certs/etcd/ca.crt kube-apiserver
+refresh_opt_in_local_config etcd-certfile ${SNAP_DATA}/certs/etcd/apiserver-etcd-client.crt kube-apiserver
+refresh_opt_in_local_config etcd-keyfile ${SNAP_DATA}/certs/etcd/apiserver-etcd-client.key kube-apiserver
+
+snapctl stop microk8s.daemon-k8s-dqlite --disable
+snapctl restart microk8s.daemon-kubelite
+
+# wait for api server to come up
+${SNAP}/microk8s-status.wrapper --wait-ready
+
+${SNAP}/microk8s-kubectl.wrapper apply -f ${SNAP_DATA}/args/cni-network/cni.yaml
+
+rm ${SNAP_DATA}/var/lock/ha-cluster
+touch ${SNAP_DATA}/var/lock/ha-etcd
